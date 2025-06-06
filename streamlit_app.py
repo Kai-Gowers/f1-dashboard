@@ -1,151 +1,162 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import altair as alt
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
-
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
+# Load and preprocess data
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def load_data():
+    results = pd.read_csv("results.csv")
+    races = pd.read_csv("races.csv")
+    drivers = pd.read_csv("drivers.csv")
+    constructors = pd.read_csv("constructors.csv")
+    qualifying = pd.read_csv("qualifying.csv")
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    races = races[['raceId', 'year']]
+    results = results.merge(races, on='raceId')
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    # Process drivers
+    results_drivers = results.merge(drivers[['driverId', 'surname']], on='driverId')
+    driver_agg = (
+        results_drivers[(results_drivers['year'] >= 2010) & (results_drivers['year'] <= 2020)]
+        .groupby(['year', 'surname'], as_index=False)
+        .agg({'points': 'sum', 'positionOrder': lambda x: (x == 1).sum()})
+    )
+    driver_agg['type'] = 'Driver'
+    driver_agg.rename(columns={'surname': 'name', 'positionOrder': 'wins'}, inplace=True)
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # Process constructors
+    results_constructors = results.merge(constructors[['constructorId', 'name']], on='constructorId')
+    constructor_agg = (
+        results_constructors[(results_constructors['year'] >= 2010) & (results_constructors['year'] <= 2020)]
+        .groupby(['year', 'name'], as_index=False)
+        .agg({'points': 'sum', 'positionOrder': lambda x: (x == 1).sum()})
+    )
+    constructor_agg['type'] = 'Constructor'
+    constructor_agg.rename(columns={'positionOrder': 'wins'}, inplace=True)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+    # Podium finishes for constructors
+    podiums_constructors = results_constructors[results_constructors['positionOrder'].notna()]
+    podiums_constructors['positionOrder'] = podiums_constructors['positionOrder'].astype(int)
+    podiums_constructors = podiums_constructors[
+        (podiums_constructors['positionOrder'] <= 3) &
+        (podiums_constructors['year'] >= 2010) & (podiums_constructors['year'] <= 2020)
+    ]
+    constructor_podium_counts = (
+        podiums_constructors.groupby(['year', 'name']).size().reset_index(name='podiums')
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # Qualifying average position per driver per year
+    qualifying = qualifying.merge(races[['raceId', 'year']], on='raceId')
+    qualifying = qualifying.merge(drivers[['driverId', 'surname']], on='driverId')
+    qualifying = qualifying[
+        (qualifying['year'] >= 2010) & (qualifying['year'] <= 2020)
+    ]
+    qualifying_avg = (
+        qualifying.groupby(['year', 'surname'], as_index=False)
+        .agg({'position': 'mean'})
+        .rename(columns={'surname': 'name', 'position': 'avg_qualifying_position'})
+    )
 
-    return gdp_df
+    return driver_agg, constructor_agg, constructor_podium_counts, qualifying_avg
 
-gdp_df = get_gdp_data()
+# Load data
+driver_data, constructor_data, constructor_podiums, qualifying_avg = load_data()
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+# Sidebar controls
+metric = st.sidebar.radio("Select Metric:", ['points', 'wins'])
+years = ['All Years'] + sorted(driver_data['year'].unique())
+selected_year = st.sidebar.selectbox("Select Year:", years)
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+# Page Title
+st.markdown("""
+    <h1 style='text-align: center; white-space: nowrap;'>F1 Dominance Dashboard: 2010–2020</h1>
+    """, unsafe_allow_html=True)
+st.markdown("Explore which **drivers** and **constructors** dominated Formula 1 in the past decade!")
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+# Tabs for Driver vs Constructor
+tab1, tab2 = st.tabs(["Drivers", "Constructors"])
 
-# Add some spacing
-''
-''
+with tab1:
+    ddf = driver_data.copy()
+    if selected_year != 'All Years':
+        ddf = ddf[ddf['year'] == int(selected_year)]
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+    ddf = ddf.sort_values(by=metric, ascending=False).head(10 if selected_year != 'All Years' else 50)
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+    selection = alt.selection_point(fields=['name'])
 
-countries = gdp_df['Country Code'].unique()
+    bar_chart = alt.Chart(ddf).mark_bar().encode(
+        x=alt.X(f'{metric}:Q', title=metric.title()),
+        y=alt.Y('name:N', sort='-x', title='Driver'),
+        tooltip=['year', 'name', f'{metric}'],
+        opacity=alt.condition(selection, alt.value(1), alt.value(0.4))
+    ).add_params(selection).properties(
+        width=900,
+        height=500,
+        title=f"Top F1 Drivers by {metric.title()}"
+    )
 
-if not len(countries):
-    st.warning("Select at least one country")
+    driver_selection = alt.selection_point(name='SelectDriver', fields=['name'], on='click', bind='legend')
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+    area_chart = alt.Chart(driver_data[driver_data['wins'] > 0]).mark_area().encode(
+        x=alt.X('year:O', title='Year'),
+        y=alt.Y('wins:Q', stack='zero', title='Number of Wins'),
+        color=alt.Color('name:N', title='Driver', scale=alt.Scale(scheme='category20')),
+        tooltip=['year', 'name', 'wins'],
+        opacity=alt.condition(driver_selection, alt.value(1), alt.value(0.15))
+    ).add_params(driver_selection).properties(
+        title='Driver Dominance by Wins (2010–2020)',
+        width=900,
+        height=400
+    )
 
-''
-''
-''
+    qualifying_filtered = qualifying_avg[qualifying_avg['name'].isin(driver_data[driver_data['wins'] > 0]['name'].unique())]
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+    line_chart = alt.Chart(qualifying_filtered).mark_line(point=True).encode(
+        x=alt.X('year:O', title='Year'),
+        y=alt.Y('avg_qualifying_position:Q', title='Avg Qualifying Position'),
+        color=alt.Color('name:N', title='Driver', scale=alt.Scale(scheme='category20')),
+        tooltip=['year', 'name', 'avg_qualifying_position'],
+        opacity=alt.condition(driver_selection, alt.value(1), alt.value(0.1))
+    ).add_params(driver_selection).properties(
+        title='Driver Dominance by Average Qualifying Position (2010-2020)',
+        width=900,
+        height=400
+    )
 
-st.header('GDP over time', divider='gray')
+    st.altair_chart(bar_chart, use_container_width=True)
+    st.altair_chart(area_chart, use_container_width=True)
+    st.altair_chart(line_chart, use_container_width=True)
 
-''
+with tab2:
+    cdf = constructor_data.copy()
+    if selected_year != 'All Years':
+        cdf = cdf[cdf['year'] == int(selected_year)]
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+    selection = alt.selection_point(fields=['name'])
 
-''
-''
+    bar_chart = alt.Chart(cdf).mark_bar().encode(
+        x=alt.X(f'{metric}:Q', title=metric.title()),
+        y=alt.Y('name:N', sort='-x', title='Constructor'),
+        tooltip=['year', 'name', f'{metric}'],
+        opacity=alt.condition(selection, alt.value(1), alt.value(0.4))
+    ).add_params(selection).properties(
+        width=900,
+        height=500,
+        title=f"Top F1 Constructors by {metric.title()}"
+    )
 
+    area_chart = alt.Chart(constructor_podiums).mark_area().encode(
+        x=alt.X('year:O', title='Year'),
+        y=alt.Y('podiums:Q', stack='zero', title='Number of Podiums'),
+        color=alt.Color('name:N', title='Constructor'),
+        tooltip=['year', 'name', 'podiums'],
+        opacity=alt.condition(selection, alt.value(1), alt.value(0.2))
+    ).add_params(selection).properties(
+        title='Team Dominance by Podium Finishes (2010–2020)',
+        width=900,
+        height=500
+    )
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+    st.altair_chart(bar_chart, use_container_width=True)
+    st.altair_chart(area_chart, use_container_width=True)
