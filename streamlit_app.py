@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 
-# Load and preprocess data
 @st.cache_data
 def load_data():
     results = pd.read_csv("results.csv")
@@ -59,21 +58,20 @@ def load_data():
 
     return driver_agg, constructor_agg, constructor_podium_counts, qualifying_avg
 
-# Load data
+
+# Data time
+
 driver_data, constructor_data, constructor_podiums, qualifying_avg = load_data()
 
-# Sidebar controls
 metric = st.sidebar.radio("Select Metric:", ['points', 'wins'])
 years = ['All Years'] + sorted(driver_data['year'].unique())
 selected_year = st.sidebar.selectbox("Select Year:", years)
 
-# Page Title
 st.markdown("""
     <h1 style='text-align: center; white-space: nowrap;'>F1 Dominance Dashboard: 2010–2020</h1>
     """, unsafe_allow_html=True)
 st.markdown("Explore which **drivers** and **constructors** dominated Formula 1 in the past decade!")
 
-# Tabs for Driver vs Constructor
 tab1, tab2 = st.tabs(["Drivers", "Constructors"])
 
 with tab1:
@@ -98,6 +96,11 @@ with tab1:
 
     driver_selection = alt.selection_point(name='SelectDriver', fields=['name'], on='click', bind='legend')
 
+    qualifying_filtered = qualifying_avg[qualifying_avg['name'].isin(driver_data[driver_data['wins'] > 0]['name'].unique())]
+
+    driver_data['name'] = driver_data['name'].astype(str)
+    qualifying_filtered['name'] = qualifying_filtered['name'].astype(str)
+
     area_chart = alt.Chart(driver_data[driver_data['wins'] > 0]).mark_area().encode(
         x=alt.X('year:O', title='Year'),
         y=alt.Y('wins:Q', stack='zero', title='Number of Wins'),
@@ -106,34 +109,34 @@ with tab1:
         opacity=alt.condition(driver_selection, alt.value(1), alt.value(0.15))
     ).add_params(driver_selection).properties(
         title='Driver Dominance by Wins (2010–2020)',
-        width=900,
-        height=400
+        width=400,
+        height=250
     )
 
-    qualifying_filtered = qualifying_avg[qualifying_avg['name'].isin(driver_data[driver_data['wins'] > 0]['name'].unique())]
 
     line_chart = alt.Chart(qualifying_filtered).mark_line(point=True).encode(
         x=alt.X('year:O', title='Year'),
         y=alt.Y('avg_qualifying_position:Q', title='Avg Qualifying Position'),
-        color=alt.Color('name:N', title='Driver', scale=alt.Scale(scheme='category20')),
+        color=alt.Color('name:N', title='Driver', scale=alt.Scale(scheme='category20'), legend=alt.Legend(orient="bottom", columns=7)),
         tooltip=['year', 'name', 'avg_qualifying_position'],
         opacity=alt.condition(driver_selection, alt.value(1), alt.value(0.1))
     ).add_params(driver_selection).properties(
         title='Driver Dominance by Average Qualifying Position (2010-2020)',
-        width=900,
-        height=400
+        width=400,
+        height=250
     )
 
-    st.altair_chart(bar_chart, use_container_width=True)
-    st.altair_chart(area_chart, use_container_width=True)
-    st.altair_chart(line_chart, use_container_width=True)
+    st.altair_chart(bar_chart, use_container_width=False)
+    
+    combined = area_chart | line_chart
+    st.altair_chart(combined, use_container_width=False)
 
 with tab2:
     cdf = constructor_data.copy()
     if selected_year != 'All Years':
         cdf = cdf[cdf['year'] == int(selected_year)]
 
-    selection = alt.selection_point(fields=['name'])
+    selection = alt.selection_point(fields=['name'], on='click', bind='legend')
 
     bar_chart = alt.Chart(cdf).mark_bar().encode(
         x=alt.X(f'{metric}:Q', title=metric.title()),
