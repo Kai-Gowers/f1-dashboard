@@ -58,9 +58,11 @@ def load_data():
    ]
    qualifying_avg = (
        qualifying.groupby(['year', 'surname'], as_index=False)
-       .agg({'position': 'mean'})
+       .agg({'position': 'median'})
        .rename(columns={'surname': 'name', 'position': 'avg_qualifying_position'})
    )
+   qualifying_avg['avg_qualifying_position'] = qualifying_avg['avg_qualifying_position'].round(1)
+
 
 
    return driver_agg, constructor_agg, constructor_podium_counts, qualifying_avg
@@ -185,13 +187,66 @@ with tab1:
        width=400,
        height=250
    )
+   
+   st.markdown(
+    "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a driver in the chart to highlight</div>",
+    unsafe_allow_html=True
+   )
 
    st.altair_chart(bar_chart, use_container_width=True)
    if filters_changed:
       st.toast("✅ Change applied!")
-  
+
+   
+   st.markdown(
+    "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a driver in the legend or either chart to highlight</div>",
+    unsafe_allow_html=True
+   )
+
    combined = area_chart | line_chart
    st.altair_chart(combined, use_container_width=False)
+   
+
+
+constructor_colors = {
+    'Mercedes': '#00D2BE',
+    'Ferrari': '#DC0000',
+    'Red Bull': '#1E41FF',
+    'McLaren': '#FF8700',
+    'Renault': '#FFF500',
+    'Alpine': '#007FFF',        # Strong Azure Blue
+    'AlphaTauri': '#1C2D5A',
+    'Alfa Romeo': '#900000',
+    'Haas F1 Team': "#3F94D6",
+    'Williams': '#3399FF',      # Medium Sky Blue
+    'Racing Point': '#F596C8',
+    'Toro Rosso': '#6495ED',    # Cornflower Blue
+    'Force India': '#F26622',
+    'Lotus F1': '#FFD700',
+    'Caterham': '#006F62',
+    'Marussia': '#B5121B',
+    'Manor': '#ED1C24',
+    'Sauber': '#4682B4',        # Steel Blue
+    'Virgin': '#D70040',
+    'HRT': '#A8A8A8'
+}
+
+constructor_colors_stacked = {
+    'Mercedes': '#00D2BE',      # Teal
+    'Ferrari': '#DC0000',       # Red
+    'Red Bull': '#1E41FF',      # Deep Royal Blue
+    'McLaren': '#FF8700',       # Papaya Orange
+    'Renault': '#FFF500',       # Bright Yellow
+    'Alpine': '#007FFF',        # Strong Azure Blue
+    'AlphaTauri': '#1C2D5A',    # Dark Slate Blue
+    'Williams': '#3399FF',      # Medium Sky Blue
+    'Racing Point': '#F596C8',  # Pink
+    'Toro Rosso': '#6495ED',    # Cornflower Blue
+    'Force India': '#F26622',   # Bright Orange
+    'Lotus F1': '#FFD700',      # Gold
+    'Sauber': '#4682B4'         # Steel Blue
+}
+
 
 
 with tab2:
@@ -206,6 +261,12 @@ with tab2:
    bar_chart = alt.Chart(cdf).mark_bar().encode(
        x=alt.X(f'{metric}:Q', title=metric.title()),
        y=alt.Y('name:N', sort='-x', title='Constructor'),
+       color=alt.Color(
+        'name:N',
+        scale=alt.Scale(domain=list(constructor_colors.keys()), range=list(constructor_colors.values())),
+        title='Constructor',
+        legend=None
+       ),
        tooltip=['year', 'name', f'{metric}'],
        opacity=alt.condition(selection, alt.value(1), alt.value(0.4))
    ).add_params(selection).properties(
@@ -218,7 +279,11 @@ with tab2:
    area_chart = alt.Chart(constructor_podiums).mark_area().encode(
        x=alt.X('year:O', title='Year'),
        y=alt.Y('podiums:Q', stack='zero', title='Number of Podiums'),
-       color=alt.Color('name:N', title='Constructor'),
+       color=alt.Color(
+        'name:N',
+        scale=alt.Scale(domain=list(constructor_colors_stacked.keys()), range=list(constructor_colors_stacked.values())),
+        title='Constructor'
+       ),
        tooltip=['year', 'name', 'podiums'],
        opacity=alt.condition(selection, alt.value(1), alt.value(0.2))
    ).add_params(selection).properties(
@@ -227,7 +292,16 @@ with tab2:
        height=500
    )
 
+   st.markdown(
+    "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a constructor in the chart to highlight</div>",
+    unsafe_allow_html=True
+   )
+
    st.altair_chart(bar_chart, use_container_width=True)
 
+   st.markdown(
+    "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a constructor in the chart or legend to highlight</div>",
+    unsafe_allow_html=True
+   )
    st.altair_chart(area_chart, use_container_width=True)
 
