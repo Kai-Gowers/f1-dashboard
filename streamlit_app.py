@@ -100,11 +100,10 @@ st.markdown("Explore which **drivers** and **constructors** dominated Formula 1 
 
 with st.expander("Learn How Formula 1 Works!"):
     st.markdown("""
-    **🏁 Pole Position**: The first starting position on the grid, earned by the fastest qualifier.  
     **🚗 Constructor**: A team that designs, builds, and races a car (e.g., Ferrari, Mercedes).  
-    **👨‍🔧 Drivers per Constructor**: Each constructor fields 2 drivers in every race.  
+    **👨‍🔧 Drivers per Constructor**: Each constructor fields the same 2 drivers for every race in a season.   
     **📅 Races per Season**: Typically 20–23 races per year, varying slightly.  
-    **⏱️ Qualifying**: A timed session before each race where drivers compete to set the fastest lap. The results determine the starting grid for the race, with the fastest driver earning pole position.  
+    **⏱️ Qualifying**: A timed session before each race where drivers compete to set the fastest lap. The results determine the starting grid for the race, with the fastest driver earning pole position (1st).   
     **🏆 Points System**: Points are awarded to the top 10 finishers in each race as follows:
 
     | Position | Points |
@@ -136,12 +135,25 @@ with tab1:
 
 
    selection = alt.selection_point(fields=['name'])
+   
+   st.markdown("""
+    ### Driver Performance Bar Chart
 
+    You can **filter the chart by year, total points, and wins** using the sidebar options.
+
+    - **Points** reflect **cumulative performance** over an entire season (or multiple seasons), accounting for finishing position in every race.
+    - **Wins** indicate how many times a driver finished first, but don't consider consistency.
+
+    > For example, a driver with more points but fewer wins may have consistently placed 2nd or 3rd, showing strong overall performance.
+
+    Use the filters to explore different timeframes and compare how different drivers performed.
+   """)
 
    bar_chart = alt.Chart(ddf).mark_bar().encode(
        x=alt.X(f'{metric}:Q', title=metric.title()),
        y=alt.Y('name:N', sort='-x', title='Driver'),
        tooltip=['year', 'name', f'{metric}'],
+       order=alt.Order('year:O', sort='ascending'),  # <-- this controls internal stacking
        opacity=alt.condition(selection, alt.value(1), alt.value(0.4))
    ).add_params(selection).properties(
        width=900,
@@ -160,6 +172,23 @@ with tab1:
    driver_data['name'] = driver_data['name'].astype(str)
    qualifying_filtered['name'] = qualifying_filtered['name'].astype(str)
 
+   annotation_point_1 = pd.DataFrame({
+        'year': [2014],  
+        'wins': [21.99] 
+   })
+
+   annotation_text_1 = alt.Chart(annotation_point_1).mark_text(
+        text='⬆️ LARGER AREA = BETTER',
+        align='right',
+        baseline='top',
+        dx=-5,
+        dy=5,
+        fontSize=13,
+        fontWeight='bold'
+   ).encode(
+        x=alt.X('year:O'),
+        y=alt.Y('wins:Q')
+   )
 
    area_chart = alt.Chart(driver_data[driver_data['wins'] > 0]).mark_area().encode(
        x=alt.X('year:O', title='Year'),
@@ -173,8 +202,23 @@ with tab1:
        height=250
    )
 
+   annotation_point_2 = pd.DataFrame({
+    'year': [2020],  # max year in your chart
+    'avg_qualifying_position': [23]  # lowest (best) position
+   })
 
-
+   annotation_text_2 = alt.Chart(annotation_point_2).mark_text(
+        text='⬇️ LOWER = BETTER',
+        align='right',
+        baseline='top',
+        dx=-5,
+        dy=5,
+        fontSize=13,
+        fontWeight='bold'
+   ).encode(
+        x=alt.X('year:O'),
+        y=alt.Y('avg_qualifying_position:Q')
+   )
 
    line_chart = alt.Chart(qualifying_filtered).mark_line(point=True).encode(
        x=alt.X('year:O', title='Year'),
@@ -197,14 +241,41 @@ with tab1:
    if filters_changed:
       st.toast("✅ Change applied!")
 
-   
+   st.markdown("""
+        ### Driver Dominance Over Time: Wins vs. Qualifying Performance
+
+        This section combines two visualizations to help you understand **driver dominance over time**:
+
+        - The **stacked area chart** shows **total wins per driver** each season, highlighting standout years and shifts in dominance.
+        - The **line chart** shows each driver's **average qualifying position**, offering insight into their **single-lap pace and consistency**.
+
+        > While **wins** reflect race-day success, **qualifying position** indicates how competitive a driver is in setting fast laps and securing good starting positions.
+
+        Use this view to compare drivers who not only win races but also consistently start near the front of the grid.
+   """)
+
    st.markdown(
     "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a driver in the legend or either chart to highlight</div>",
     unsafe_allow_html=True
    )
 
-   combined = area_chart | line_chart
+   line_chart_annotated = line_chart + annotation_text_2
+   area_chart_annotated = area_chart + annotation_text_1
+
+   combined = area_chart_annotated | line_chart_annotated
    st.altair_chart(combined, use_container_width=False)
+
+   st.markdown("---") 
+   st.markdown("### Key Insights")  
+
+   with st.expander("Key Insights: Driver Dominance (2010–2020)"):
+    st.markdown("""
+        - **Sebastian Vettel** dominated the early 2010s, winning four consecutive world titles with Red Bull from **2010 to 2013**, often combining strong qualifying with race wins.
+        - **Lewis Hamilton** took over as the dominant force from **2014 to 2020**, driving for Mercedes. He had the most wins and pole positions during this period, showing both qualifying and race-day excellence.
+        - **Nico Rosberg** (2016) briefly disrupted Hamilton’s streak with a title win, despite slightly fewer wins overall.
+        - **Fernando Alonso** and **Jenson Button** were competitive early in the decade but gradually faded as their teams struggled.
+        - **Max Verstappen** emerged as a serious contender near the end of the decade, becoming a consistent podium finisher and race winner by 2019–2020.
+    """)
    
 
 
@@ -257,6 +328,20 @@ with tab2:
 
    selection = alt.selection_point(fields=['name'], on='click', bind='legend')
 
+   st.markdown("""
+    ### Constructor Performance Bar Chart
+
+    This chart displays **Constructor (team) performance**, and you can **filter it by year, total points, and wins** using the sidebar controls.
+
+    - **Points** represent the **combined performance of both team drivers** across races.
+    - **Wins** reflect how often **either of the two drivers** from a constructor won a race.
+
+    > A constructor with high points but fewer wins may have had both drivers consistently finish in the top 5, showing **team-wide reliability and depth**.
+
+    Use this chart to compare how different teams dominated across seasons or sustained strong performance without necessarily always winning.
+   """)
+
+
 
    bar_chart = alt.Chart(cdf).mark_bar().encode(
        x=alt.X(f'{metric}:Q', title=metric.title()),
@@ -273,6 +358,24 @@ with tab2:
        width=900,
        height=500,
        title=f"Top F1 Constructors by {metric.title()}"
+   )
+
+   annotation_point_3 = pd.DataFrame({
+        'year': [2013],  # rightmost year
+        'podiums': [64.5]  # highest podium count
+   })
+
+   annotation_text_3 = alt.Chart(annotation_point_3).mark_text(
+        text='⬆️ LARGER AREA = BETTER',
+        align='right',
+        baseline='top',
+        dx=-5,
+        dy=5,
+        fontSize=13,
+        fontWeight='bold',
+   ).encode(
+        x=alt.X('year:O'),
+        y=alt.Y('podiums:Q')
    )
 
 
@@ -299,9 +402,39 @@ with tab2:
 
    st.altair_chart(bar_chart, use_container_width=True)
 
+   st.markdown("""
+        ### Constructor Dominance Over Time: Podiums
+
+        This stacked area chart highlights **team (constructor) dominance over time** by visualizing the number of **podium finishes** each season.
+
+        - A **podium finish** refers to a driver finishing **in the top 3 positions** of a race — 1st, 2nd, or 3rd place.
+        - Since each constructor can have **two drivers**, podiums are a great measure of **overall team competitiveness**, not just individual brilliance.
+
+        > A constructor with frequent podiums — even without many wins — demonstrates **reliable top-tier performance and strong team depth**.
+
+        Use this chart to explore which teams consistently placed at the front of the grid and how team dominance has shifted across seasons.
+   """)
+
    st.markdown(
     "<div style='text-align:left; font-size:13px; color:gray;'>🔍 Click a constructor in the chart or legend to highlight</div>",
     unsafe_allow_html=True
    )
-   st.altair_chart(area_chart, use_container_width=True)
+
+   area_chart_annotated = area_chart + annotation_text_3
+
+   st.altair_chart(area_chart_annotated, use_container_width=True)
+
+   st.markdown("---") 
+   st.markdown("### Key Insights")  
+
+   with st.expander("Key Insights: Constructor Dominance (2010–2020)"):
+    st.markdown("""
+        - **Red Bull Racing** dominated from **2010 to 2013**, driven largely by Sebastian Vettel’s performance and consistent podium finishes.
+        - **Mercedes** began a historic run starting in **2014**, winning **seven consecutive constructor championships** through 2020, with both Lewis Hamilton and Nico Rosberg contributing heavily.
+        - Mercedes' success was marked not just by wins but by **consistent double podiums**, showing dominance through both drivers.
+        - **Ferrari** remained competitive (especially in 2017–2018 with Vettel), but lacked the consistency to dethrone Mercedes.
+        - Teams like **McLaren**, **Lotus**, and **Williams** had intermittent podium appearances but were not long-term title challengers in this era.
+    """)
+
+   
 
