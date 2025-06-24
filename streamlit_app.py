@@ -447,7 +447,6 @@ constructor_colors = {
     'Red Bull': '#1E41FF',
     'McLaren': '#FF8700',
     'Williams': '#3399FF',      # Medium Sky Blue
-    'Toro Rosso': '#6495ED',    # Cornflower Blue
     'Inactive/Retired': '#F9F9F9',
 }
 
