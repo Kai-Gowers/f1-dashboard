@@ -415,7 +415,7 @@ with tab2:
 
 
 st.markdown("### Team Progression of the Top 5 Drivers")
-st.markdown("This chart shows how the top 10 drivers switched between teams over the decade.")
+st.markdown("This chart shows how the top 5 drivers switched between teams over the decade.")
 
 # Team progression data for 5 drivers
 data = pd.DataFrame([
