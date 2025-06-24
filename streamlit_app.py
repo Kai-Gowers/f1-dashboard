@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-import time
-
 
 @st.cache_data
 def load_data():
@@ -62,8 +60,7 @@ def load_data():
        .rename(columns={'surname': 'name', 'position': 'avg_qualifying_position'})
    )
    qualifying_avg['avg_qualifying_position'] = qualifying_avg['avg_qualifying_position'].round(1)
-
-
+    
 
    return driver_agg, constructor_agg, constructor_podium_counts, qualifying_avg
 
@@ -170,7 +167,7 @@ with tab1:
 
 
    driver_data['name'] = driver_data['name'].astype(str)
-   qualifying_filtered['name'] = qualifying_filtered['name'].astype(str)
+   qualifying_filtered.loc[:, 'name'] = qualifying_filtered['name'].astype(str)
 
    annotation_point_1 = pd.DataFrame({
         'year': [2014],  
@@ -265,17 +262,7 @@ with tab1:
    combined = area_chart_annotated | line_chart_annotated
    st.altair_chart(combined, use_container_width=False)
 
-   st.markdown("---") 
-   st.markdown("### Key Insights")  
-
-   with st.expander("Key Insights: Driver Dominance (2010–2020)"):
-    st.markdown("""
-        - **Sebastian Vettel** dominated the early 2010s, winning four consecutive world titles with Red Bull from **2010 to 2013**, often combining strong qualifying with race wins.
-        - **Lewis Hamilton** took over as the dominant force from **2014 to 2020**, driving for Mercedes. He had the most wins and pole positions during this period, showing both qualifying and race-day excellence.
-        - **Nico Rosberg** (2016) briefly disrupted Hamilton’s streak with a title win, despite slightly fewer wins overall.
-        - **Fernando Alonso** and **Jenson Button** were competitive early in the decade but gradually faded as their teams struggled.
-        - **Max Verstappen** emerged as a serious contender near the end of the decade, becoming a consistent podium finisher and race winner by 2019–2020.
-    """)
+   
    
 
 
@@ -299,7 +286,9 @@ constructor_colors = {
     'Manor': '#ED1C24',
     'Sauber': '#4682B4',        # Steel Blue
     'Virgin': '#D70040',
-    'HRT': '#A8A8A8'
+    'HRT': '#A8A8A8',
+    'Retired': '#F9F9F9',
+    'Inactive': '#F9F9F9'
 }
 
 constructor_colors_stacked = {
@@ -424,10 +413,79 @@ with tab2:
 
    st.altair_chart(area_chart_annotated, use_container_width=True)
 
-   st.markdown("---") 
-   st.markdown("### Key Insights")  
 
-   with st.expander("Key Insights: Constructor Dominance (2010–2020)"):
+st.markdown("### Team Progression of the Top 5 Drivers")
+st.markdown("This chart shows how the top 10 drivers switched between teams over the decade.")
+
+# Team progression data for 5 drivers
+data = pd.DataFrame([
+    *[(year, 'Hamilton', 'McLaren') for year in range(2010, 2013)],
+    *[(year, 'Hamilton', 'Mercedes') for year in range(2013, 2021)],
+
+    *[(year, 'Vettel', 'Red Bull') for year in range(2010, 2015)],
+    *[(year, 'Vettel', 'Ferrari') for year in range(2015, 2021)],
+
+    *[(year, 'Rosberg', 'Mercedes') for year in range(2010, 2017)],
+    *[(year, 'Rosberg', 'Inactive/Retired') for year in range(2017, 2021)],
+
+    *[(year, 'Alonso', 'Ferrari') for year in range(2010, 2015)],
+    *[(year, 'Alonso', 'McLaren') for year in range(2015, 2019)],
+    *[(year, 'Alonso', 'Inactive/Retired') for year in range(2019, 2021)],
+
+    *[(year, 'Bottas', 'Inactive/Retired') for year in range(2010, 2013)],
+    *[(year, 'Bottas', 'Williams') for year in range(2013, 2017)],
+    *[(year, 'Bottas', 'Mercedes') for year in range(2017, 2021)],
+], columns=['year', 'driver', 'team'])
+
+data['year'] = data['year'].astype(str)
+
+driver_order = ['Hamilton', 'Vettel', 'Bottas', 'Alonso', 'Rosberg']
+
+constructor_colors = {
+    'Mercedes': '#00D2BE',
+    'Ferrari': '#DC0000',
+    'Red Bull': '#1E41FF',
+    'McLaren': '#FF8700',
+    'Williams': '#3399FF',      # Medium Sky Blue
+    'Toro Rosso': '#6495ED',    # Cornflower Blue
+    'Inactive/Retired': '#F9F9F9',
+}
+
+color_scale = alt.Scale(
+    domain=list(constructor_colors.keys()),
+    range=list(constructor_colors.values())
+)
+
+chart = alt.Chart(data).mark_rect().encode(
+    x=alt.X('year:O', title='Year'),
+    y=alt.Y('driver:N', title='Driver', sort=driver_order),
+    color=alt.Color('team:N', scale=color_scale),
+    tooltip=['driver', 'year', 'team']
+).properties(
+    width=750,
+    height=300,
+    title='Team Progression of Top F1 Drivers (2010–2020)'
+)
+
+
+
+st.altair_chart(chart, use_container_width=True)
+
+
+
+
+st.markdown("---") 
+st.markdown("### Key Insights")
+
+with st.expander("Key Insights: Driver Dominance (2010–2020)"):
+    st.markdown("""
+        - **Sebastian Vettel** dominated the early 2010s, winning four consecutive world titles with Red Bull from **2010 to 2013**, often combining strong qualifying with race wins.
+        - **Lewis Hamilton** took over as the dominant force from **2014 to 2020**, driving for Mercedes. He had the most wins and pole positions during this period, showing both qualifying and race-day excellence.
+        - **Nico Rosberg** (2016) briefly disrupted Hamilton’s streak with a title win, despite slightly fewer wins overall.
+        - **Fernando Alonso** and **Jenson Button** were competitive early in the decade but gradually faded as their teams struggled.
+        - **Max Verstappen** emerged as a serious contender near the end of the decade, becoming a consistent podium finisher and race winner by 2019–2020.
+    """)
+with st.expander("Key Insights: Constructor Dominance (2010–2020)"):
     st.markdown("""
         - **Red Bull Racing** dominated from **2010 to 2013**, driven largely by Sebastian Vettel’s performance and consistent podium finishes.
         - **Mercedes** began a historic run starting in **2014**, winning **seven consecutive constructor championships** through 2020, with both Lewis Hamilton and Nico Rosberg contributing heavily.
